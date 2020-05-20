@@ -15,9 +15,14 @@ class Client {
 
 		String hostname = args[0];
 		int port = Integer.parseInt(args[1]);
-		String userId = args[2];
+		String filename = args[2];
 
+		
+		System.out.println("CLIENT: Attempting to connect...");
 		try (Socket socket = new Socket(hostname, port)) {
+
+
+			System.out.println("CLIENT: Connection successful");
 
 			InputStream input = socket.getInputStream();
 			BufferedReader reader = new BufferedReader(new InputStreamReader(input));
@@ -25,12 +30,17 @@ class Client {
 			OutputStream output = socket.getOutputStream();
 			PrintWriter writer = new PrintWriter(output, true);
 
-			writer.println(userId);
-			String response = reader.readLine();
-			System.out.println(response);
+			writer.println(filename);
+
+
+			String response;
+			while(!reader.ready());
+			while((response = reader.readLine()) != null)
+				System.out.println(response);
 
 		} catch (IOException e) {
-			
+			System.out.println("CLIENT:");
+			System.out.println(e);
 		}
 	};
 

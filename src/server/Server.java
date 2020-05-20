@@ -9,6 +9,7 @@ import java.io.BufferedReader;
 import java.io.PrintWriter;
 import java.io.IOException;
 
+
 class Server {
 	public static void main(String [] args) {
 		
@@ -18,23 +19,14 @@ class Server {
 
 		try (ServerSocket serverSocket = new ServerSocket(port)) {
 
+			System.out.println("SERVER: Initializing...");
 			while(true) {
 				Socket socket = serverSocket.accept();
-
-				InputStream input = socket.getInputStream();
-				BufferedReader reader = new BufferedReader(new InputStreamReader(input));
-				String userId = reader.readLine();
-
-				OutputStream output = socket.getOutputStream();
-				PrintWriter writer = new PrintWriter(output, true);
-
-				writer.println("Simple File Protocol: User ID=" + userId);
-
-				socket.close();
+				System.out.println("SERVER: Received incoming connection.");
+				new Thread(new ClientListener(socket)).start();
 			}
 
 		} catch (IOException e) {
-			
 		}
 	};
 
