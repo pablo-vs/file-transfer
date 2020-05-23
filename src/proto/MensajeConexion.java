@@ -1,12 +1,10 @@
 package proto;
 
 public class MensajeConexion extends Mensaje {
-	private String[] ficheros;
+	public final Usuario usuario;
 
-	MensajeConexion(String origen, String destino, String ... fich) {
+	MensajeConexion(String origen, String destino, Usuario usu) {
 		super(TipoMensaje.MENSAJE_CONEXION, origen, destino);
-		ficheros = new String[fich.length];
-		for(int i = 0; i < fich.length; ++i)
-			ficheros[i] = fich[i];
+		usuario = usu;
 	}
 }
