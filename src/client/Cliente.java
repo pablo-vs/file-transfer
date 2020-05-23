@@ -8,7 +8,7 @@ import java.io.BufferedReader;
 import java.io.PrintWriter;
 import java.io.IOException;
 
-public class Client {
+public class Cliente {
 	public static void main(String [] args) {
 		
 		if (args.length < 3) return;

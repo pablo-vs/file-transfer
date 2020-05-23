@@ -9,14 +9,14 @@ import java.io.PrintWriter;
 import java.io.IOException;
 import java.io.FileReader;
 
-public class ClientListener implements Runnable {
+public class OyenteCliente implements Runnable {
 
 	private final int BUFF_SIZE = 8192;
 	private final Socket socket;
 	private BufferedReader reader;
 	private PrintWriter writer;
 
-	ClientListener(Socket s) {
+	OyenteCliente(Socket s) {
 		socket = s;
 	}
 
