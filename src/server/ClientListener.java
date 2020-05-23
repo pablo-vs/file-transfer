@@ -9,7 +9,7 @@ import java.io.PrintWriter;
 import java.io.IOException;
 import java.io.FileReader;
 
-class ClientListener implements Runnable {
+public class ClientListener implements Runnable {
 
 	private final int BUFF_SIZE = 8192;
 	private final Socket socket;

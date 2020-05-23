@@ -10,7 +10,7 @@ import java.io.PrintWriter;
 import java.io.IOException;
 
 
-class Server {
+public class Server {
 	public static void main(String [] args) {
 		
 		if (args.length < 1) return;
