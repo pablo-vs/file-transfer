@@ -23,7 +23,7 @@ public class Servidor {
 			while(true) {
 				Socket socket = serverSocket.accept();
 				System.out.println("SERVER: Received incoming connection.");
-				new Thread(new ClientListener(socket)).start();
+				new Thread(new OyenteCliente(socket)).start();
 			}
 
 		} catch (IOException e) {
