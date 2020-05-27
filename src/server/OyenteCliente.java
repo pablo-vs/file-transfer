@@ -1,53 +1,126 @@
 package server;
 
 import java.net.Socket;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.io.BufferedReader;
-import java.io.PrintWriter;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.io.IOException;
-import java.io.FileReader;
+
+import java.util.logging.Logger;
+import java.util.logging.Handler;
+import java.util.logging.ConsoleHandler;
+import java.util.logging.Level;
+
+import proto.*;
 
 public class OyenteCliente implements Runnable {
 
 	private final int BUFF_SIZE = 8192;
 	private final Socket socket;
-	private BufferedReader reader;
-	private PrintWriter writer;
+	private final Servidor servidor;
+	private boolean keepGoing;
+	private ObjectInputStream input;
+	private ObjectOutputStream output;
+	private InetAddress localhost, clientDir;
+	private Usuario usuario;
 
-	OyenteCliente(Socket s) {
+	private Logger log = Logger.getLogger("OYENTE_CLIENTE");
+	private Handler logH = new ConsoleHandler();
+
+
+	OyenteCliente(Socket s, Servidor serv) {
+		log.addHandler(logH);
 		socket = s;
+		servidor = serv;
+		keepGoing = true;
 	}
 
 	public void run() {
+
 		try (socket) {
-			InputStream input = socket.getInputStream();
-			BufferedReader reader = new BufferedReader(new InputStreamReader(input));
 
-			OutputStream output = socket.getOutputStream();
-			PrintWriter writer = new PrintWriter(output, true);
+			log.fine("Starting listener...");
 
-			String filename = reader.readLine();
-			System.out.println("SERVER: " + filename + " Requested.");
-			FileReader file = new FileReader(filename);
+			localhost = InetAddress.getLocalHost();
+
+			output = new ObjectOutputStream(socket.getOutputStream());
+			input = new ObjectInputStream(socket.getInputStream());
+
+			TipoMensaje [] posiblesMensajes = TipoMensaje.values();
+
+			log.fine("Listening for messages...");
 			
-			System.out.println("SERVER: sending file...");
-			int count;
-			char[] buffer = new char[BUFF_SIZE];
-			while((count = file.read(buffer)) > 0) {
-				System.out.println("SERVER: writing...");
-				writer.write(buffer, 0, count);
+			while(keepGoing) {
+
+				Mensaje recibido = (Mensaje) input.readObject();
+
+				log.fine("Message received.");
+
+				switch(posiblesMensajes[recibido.getTipo()]) {
+					case MENSAJE_CONEXION:
+						{
+							log.fine("MENSAJE_CONEXION.");
+							MensajeConexion m = (MensajeConexion) recibido;
+							handleConexion(m);
+							break;
+						}
+					case MENSAJE_LISTA_USUARIOS:
+						{
+							log.fine("MENSAJE_LISTA_USUARIOS.");
+							MensajeListaUsuarios m = (MensajeListaUsuarios) recibido;
+							handleListaUsuarios(m);
+							break;
+						}
+					case MENSAJE_CERRAR_CONEXION:
+						{
+							log.fine("MENSAJE_CERRAR_CONEXION.");
+							MensajeCerrarConexion m = (MensajeCerrarConexion) recibido;
+							handleCerrarConexion(m);
+							break;
+						}
+				}
 			}
+			output.close();
 
-			file.close();
-			writer.close();
-			System.out.println("SERVER: finished file transfer.");
-
-		} catch (IOException e) {
-			System.out.println("SERVER:");
-			System.out.println(e);
+		} catch (IOException | ClassNotFoundException e) {
+			log.log(Level.SEVERE, "Error: ", e);
 		}
 	}
+
+	private void handleConexion(MensajeConexion m) throws IOException {
+		clientDir = InetAddress.getByName(m.getOrigen());
+		usuario = m.usuario;
+		boolean res = servidor.addUsuario(usuario);
+		MensajeConfirmacionConexion resp = 
+			new MensajeConfirmacionConexion(
+					localhost.getHostAddress(),
+					clientDir.getHostAddress());
+		output.writeObject(resp);
+		log.fine("Response sent.");
+	}
+
+	private void handleCerrarConexion(MensajeCerrarConexion m) throws IOException {
+		boolean res = servidor.removeUsuario(usuario);
+		MensajeConfirmacionCerrar resp =
+			new MensajeConfirmacionCerrar(
+					localhost.getHostAddress(),
+					clientDir.getHostAddress());
+		output.writeObject(resp);
+		log.fine("Response sent.");
+		keepGoing = false;
+	}
+
+	private void handleListaUsuarios(MensajeListaUsuarios m) throws IOException {
+		Usuario[] lista = servidor.getListaUsuarios();
+		MensajeConfirmacionLista resp =
+			new MensajeConfirmacionLista(
+					localhost.getHostAddress(),
+					clientDir.getHostAddress(),
+					lista);
+		output.writeObject(resp);
+		log.fine("Response sent.");
+	}
+
 
 }

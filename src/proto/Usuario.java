@@ -2,11 +2,12 @@ package proto;
 
 import java.net.InetAddress;
 import java.util.List;
+import java.io.Serializable;
 
-public class Usuario {
+public class Usuario implements Serializable {
 	public final String iden;
 	public final InetAddress dir;
-	public final List<String> ficheros;
+	public List<String> ficheros;
 
 	public Usuario(String id, InetAddress d, List<String> f) {
 		iden = id;
@@ -15,4 +16,37 @@ public class Usuario {
 	}
 
 
+	@Override
+	public boolean equals(Object o) {
+		if (o == this)
+			return true;
+
+		if (!(o instanceof Usuario))
+			return false;
+
+		Usuario u = (Usuario) o;
+
+		return iden.equals(u.iden);
+	}
+
+	@Override
+	public int hashCode() {
+		return iden.hashCode();
+	}
+
+	@Override
+	public String toString() {
+		StringBuilder sb = new StringBuilder();
+		sb.append("Usuario: ");
+		sb.append(iden);
+		sb.append("\nDirección: ");
+		sb.append(dir);
+		sb.append("\nLista de ficheros:\n");
+		for(String s: ficheros) {
+			sb.append("'");
+			sb.append(s);
+		   	sb.append("', ");
+		}
+		return sb.toString();
+	}
 }

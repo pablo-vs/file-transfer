@@ -1,6 +1,8 @@
 package proto;
 
-public abstract class Mensaje {
+import java.io.Serializable;
+
+public abstract class Mensaje implements Serializable {
 	private final TipoMensaje tipo;
 	private final String origen, destino;
 
