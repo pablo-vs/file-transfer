@@ -37,17 +37,21 @@ public class OyenteServidor extends Thread {
 				Mensaje recibido = (Mensaje) input.readObject();
 
 				log.fine("Mensaje recibido.");
+				log.fine(posiblesMensajes[recibido.getTipo()]);
 				switch(posiblesMensajes[recibido.getTipo()]) {
 					case MENSAJE_CONFIRMACION_CONEXION:
-						log.fine("MENSAJE_CONFIRMACION_CONEXION.");
 						cliente.onConnectionConfirmed();
 						break;
 					case MENSAJE_CONFIRMACION_LISTA_USUARIOS:
-						log.fine("MENSAJE_CONFIRMACION_LISTA_USUARIOS.");
 						cliente.onListConfirmed((MensajeConfirmacionLista) recibido);
 						break;
+					case MENSAJE_EMITIR_FICHERO:
+						cliente.onEmitirFichero((MensajeEmitirFichero) recibido);
+						break;
+					case MENSAJE_PREPARADO_SERVIDORCLIENTE:
+						cliente.onPreparadoSC((MensajePreparadoSC) recibido);
+						break;
 					case MENSAJE_CONFIRMACION_CERRAR_CONEXION:
-						log.fine("MENSAJE_CONFIRMACION_CERRAR_CONEXION.");
 						cliente.onCloseConfirmed();
 						output.close();
 						return;

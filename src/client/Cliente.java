@@ -215,6 +215,12 @@ public class Cliente {
 		control.printOutput("Lista cargada");
 	}
 
+	public void onPreparadoSC(MensajePreparadoSC m) {
+		Receptor rec;
+		control.printOutput("Solicitud de emisión recibida:");
+		control.printOutput(m.fichero + " -> " + m.usuario.iden);
+	}
+
 	public Status getStatus() {
 		Status res;
 		statusLock.lock();

@@ -27,13 +27,14 @@ public class ControladorCliente {
 		"Localhost: %s\n" +
 		"Estado: %s\n" +
 		"\n" +
-		"Comandos básicos:\n" +
-		"s: Salir         a: Ayuda       \n" +
-		"<Enter>: Actualizar             \n" +
-		"\n" +
 		"################################\n" +
 		"%s" +
 		"################################\n" +
+		"\n" +
+		"Comandos básicos:\n" +
+		"c: Conectar      p: Pedir fich. \n" +
+		"s: Salir         a: Ayuda       \n" +
+		"<Enter>: Actualizar             \n" +
 		"\n" +
 		"Introduzca un comando: ";
 
@@ -42,6 +43,7 @@ public class ControladorCliente {
 		"<Enter>. Pulsar <Enter> sin\n" +
 		"escribir nada actualiza la\n" +
 		"interfaz.\n" +
+		"\n" +
 		"Comandos:\n" +
 		"c: Conectar      d: Desconectar \n" +
 		"p: Pedir fichero s: Salir       \n" +
@@ -51,7 +53,6 @@ public class ControladorCliente {
 		"r: Ver lista de ficheros remotos\n" +
 		"i: Ver conexiones actuales      \n" +
 		"h: Ver historial de mensajes    \n" +
-		"<Enter>: Actualizar interfaz    \n" +
 		"" +
 		"";
 

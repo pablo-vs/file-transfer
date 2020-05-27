@@ -14,3 +14,4 @@ test: build
 
 clean:
 	rm -r build
+	find . -iname '*javac*' -delete
