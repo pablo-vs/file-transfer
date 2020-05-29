@@ -17,11 +17,14 @@ public class OyenteServidor extends Thread {
 	private ObjectInputStream input;
 	private ObjectOutputStream output;
 	private Cliente cliente;
-	private Logger log = Logger.getLogger("OYENTE_CLIENTE");
-	private Handler logH = new ConsoleHandler();
+	private static Logger log = Logger.getLogger("OYENTE_CLIENTE");
+	private static Handler logH;
 
 	public OyenteServidor(ObjectInputStream in, ObjectOutputStream out, Cliente cl) {
-		log.addHandler(logH);
+		if (logH == null) {
+			logH = new ConsoleHandler();
+			log.addHandler(logH);
+		}
 		input = in;
 		output = out;
 		cliente = cl;
@@ -37,7 +40,7 @@ public class OyenteServidor extends Thread {
 				Mensaje recibido = (Mensaje) input.readObject();
 
 				log.fine("Mensaje recibido.");
-				log.fine(posiblesMensajes[recibido.getTipo()]);
+				log.fine(posiblesMensajes[recibido.getTipo()].name());
 				switch(posiblesMensajes[recibido.getTipo()]) {
 					case MENSAJE_CONFIRMACION_CONEXION:
 						cliente.onConnectionConfirmed();

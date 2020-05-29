@@ -3,12 +3,14 @@ package proto;
 import java.net.InetAddress;
 
 public class MensajePreparadoSC extends Mensaje {
-	public final InetAddress dirIp;
+	public final Usuario usu;
 	public final int puerto;
+	public final String fichero;
 
-	MensajePreparadoSC(String origen, String destino, InetAddress dir, int p) {
+	public MensajePreparadoSC(String origen, String destino, Usuario u, int p, String fich) {
 		super(TipoMensaje.MENSAJE_PREPARADO_SERVIDORCLIENTE, origen, destino);
-		dirIp = dir;
+		usu = u;
 		puerto = p;
+		fichero = fich;
 	}
 }

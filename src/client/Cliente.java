@@ -13,6 +13,7 @@ import java.net.UnknownHostException;
 
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.nio.file.Path;
 
 import java.util.logging.Logger;
 import java.util.logging.Level;
@@ -24,6 +25,7 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ConcurrentHashMap;
 
 import proto.*;
+import util.Concurrent;
 
 public class Cliente {
 
@@ -35,25 +37,27 @@ public class Cliente {
 	private ObjectInputStream input;
 	private ControladorCliente control;
 
-	private Logger log = Logger.getLogger("CLIENTE");
-	private Handler logH = new ConsoleHandler();
+	private static Logger log = Logger.getLogger("CLIENTE");
+	private static Handler logH;
 
-	private ReentrantLock statusLock = new ReentrantLock(true);
+	private Concurrent<ArrayList<String>> ficheros;
 
-	private ArrayList<String> ficheros;
+	private Concurrent<HashMap<Integer, Conexion>> conexiones =
+		new Concurrent<HashMap<Integer, Conexion>>();
 
-	private ConcurrentHashMap<String, Usuario> usuarios =
-		new ConcurrentHashMap<String, Usuario>();
+	private Concurrent<HashMap<String, Usuario>> usuarios =
+		new Concurrent<HashMap<String, Usuario>>();
 
-	private ConcurrentHashMap<String, ArrayList<String>> ficherosRemotos =
-		new ConcurrentHashMap<String, ArrayList<String>>();
+	private Concurrent<HashMap<String, ArrayList<String>>> ficherosRemotos =
+		new Concurrent<HashMap<String, ArrayList<String>>>();
 
+	private Concurrent<Status> status = new Concurrent<Status>();
 
 	public class Status {
 		public boolean conectado = false, 
-			esperandoRespuesta = false,
-			emitiendo = false,
-			recibiendo = false;
+			esperandoRespuesta = false;
+		public int emitiendo = 0,
+			recibiendo = 0;
 
 		public Status() {}
 		public Status(Status st) {
@@ -64,11 +68,13 @@ public class Cliente {
 		}
 	}
 
-	private Status status = new Status();
 
 	public Cliente(InetAddress dir, int p, String id, String fd,
 		   	ControladorCliente cont) throws IOException {
-		log.addHandler(logH);
+		if (logH == null) {
+			logH = new ConsoleHandler();
+			log.addHandler(logH);
+		}
 		serverDir = dir;
 		port = p;
 		iden = id;
@@ -80,10 +86,10 @@ public class Cliente {
 			log.log(Level.SEVERE, "No se ha podido determinar la dirección local", e);
 		}
 		
-		ficheros = new ArrayList<String>(
+		ficheros.lockAndSet(new ArrayList<String>(
 			Files.list(Paths.get(fd))
 			.map((x) -> x.getFileName().toString())
-			.collect(Collectors.toList()));
+			.collect(Collectors.toList())));
 
 	}
 
@@ -148,6 +154,66 @@ public class Cliente {
 		}
 	}
 
+	public void actualizarFicheros() {
+		control.printOutput("Leyendo lista de ficheros locales...");
+		try {
+			ficheros = new ArrayList<String>(
+				Files.list(Paths.get(fileDir))
+				.map((x) -> x.getFileName().toString())
+				.collect(Collectors.toList()));
+			control.printOutput("Lista actualizada");
+			enviarActualizar();
+		} catch (IOException e) {
+			control.printOutput("No se ha podido leer la lista.");
+			log.log(Level.SEVERE, "Error: ", e);
+		}
+	}
+
+	public void enviarActualizar() {
+		if (!status.conectado) {
+			log.fine("No se envía mensaje de actualización: no conectado");
+			return;
+		}
+		try {
+			Usuario usu = new Usuario(iden, localhost, ficheros);
+			MensajeActualizar req = new MensajeActualizar
+				(serverDir.getHostAddress(), localhost.getHostAddress(),
+				 usu);
+			output.writeObject(req);
+			log.fine("Actualización enviada al servidor");
+		} catch (IOException e) {
+			System.err.println("CLIENT:");
+			System.err.println(e);
+		}
+	}
+
+	void pedirFichero(String fich) {
+		if (!status.conectado) {
+			control.printOutput("No se puede pedir fichero: no conectado.");
+			control.setError();
+			return;
+		}
+		if (!ficherosRemotos.containsKey(fich)) {
+			control.printOutput("Fichero desconocido");
+			control.setError();
+			return;
+		}
+		try {
+			MensajePedirFichero req = new MensajePedirFichero
+				(serverDir.getHostAddress(), localhost.getHostAddress(),
+				 fich);
+
+			control.printOutput("Pidiendo fichero " + fich);
+			output.writeObject(req);
+			statusLock.lock();
+			status.esperandoRespuesta = true;
+			statusLock.unlock();
+		} catch (IOException e) {
+			System.err.println("CLIENT:");
+			System.err.println(e);
+		}
+	}
+
 	void disconnect() {
 		if (!status.conectado) {
 			control.printOutput("No se puede desconectar: no conectado.");
@@ -195,6 +261,8 @@ public class Cliente {
 		statusLock.lock();
 		status.esperandoRespuesta = false;
 		statusLock.unlock();
+		usuarios.clear();
+		ficherosRemotos.clear();
 		for(Usuario u : m.usuarios) {
 			usuarios.put(u.iden, u);
 		}
@@ -215,10 +283,61 @@ public class Cliente {
 		control.printOutput("Lista cargada");
 	}
 
-	public void onPreparadoSC(MensajePreparadoSC m) {
-		Receptor rec;
+	public void onEmitirFichero(MensajeEmitirFichero m) {
+		Path path = Paths.get(fileDir,m.fichero);
+		int port;
+		do {
+			port = 33000 + (int)(Math.random() * (1000));
+		} while(conexiones.containsKey(port));
+		Emisor em = new Emisor(path, m.usuario, port, this);
+		conexiones.put(port, em);
 		control.printOutput("Solicitud de emisión recibida:");
-		control.printOutput(m.fichero + " -> " + m.usuario.iden);
+		control.printOutput(m.fichero + " -> " + m.usuario.iden + ":" + port);
+		statusLock.lock();
+		++status.emitiendo;
+		statusLock.unlock();
+		em.start();
+		MensajePreparadoCS resp = new MensajePreparadoCS(
+			serverDir.getHostAddress(), localhost.getHostAddress(),
+			m.usuario, port, m.fichero);
+		try {
+			output.writeObject(resp);
+		} catch(IOException e) {
+			log.log(Level.SEVERE, "Error: ", e);
+		}
+	}
+
+	public void onPreparadoSC(MensajePreparadoSC m) {
+		Path path = Paths.get(fileDir, m.fichero);
+		Receptor re = new Receptor(path, m.usu, m.puerto, this);
+		conexiones.put(port, re);
+		control.printOutput("Recepción de " + m.fichero+ " preparada");
+		statusLock.lock();
+		++status.recibiendo;
+		status.esperandoRespuesta = false;
+		statusLock.unlock();
+		re.start();
+	}
+
+	public void onFinConexion(Conexion e) {
+		conexiones.remove(e.getPuerto());
+		if (e.getTipo() == 1) {
+			// Emisor
+			statusLock.lock();
+			--status.emitiendo;
+			statusLock.unlock();
+			control.printOutput("Emisión en " + e.getPuerto() + " finalizada.");
+		} else {
+			// Receptor
+			statusLock.lock();
+			--status.recibiendo;
+			statusLock.unlock();
+			control.printOutput("Recepción de " + e.getFilename() + " finalizada.");
+			ficherosLock.lock();
+			ficheros.add(e.getFilename());
+			ficherosLock.unlock();
+			enviarActualizar();
+		}
 	}
 
 	public Status getStatus() {
@@ -234,10 +353,17 @@ public class Cliente {
 	}
 
 	public List<String> getFicheros() {
+		ficherosLock.lock();
+		ArrayList<String> fich = new ArrayList<String>(ficheros);
+		ficherosLock.unlock();
 		return ficheros;
 	}
 	
 	public ConcurrentMap<String,ArrayList<String>> getFicherosRemotos() {
 		return ficherosRemotos;
+	}
+
+	public ConcurrentMap<Integer,Conexion> getConexiones() {
+		return conexiones;
 	}
 }

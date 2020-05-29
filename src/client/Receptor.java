@@ -1,6 +1,5 @@
 package client;
 
-import java.net.ServerSocket;
 import java.net.Socket;
 import java.io.IOException;
 import java.io.InputStream;
@@ -16,40 +15,37 @@ import java.util.logging.ConsoleHandler;
 
 import proto.Usuario;
 
-public class Emisor extends Thread implements Conexion {
+public class Receptor extends Thread implements Conexion {
 	
 	private final int BUFF_SIZE = 8192;
 	public final Path file;
-	public final Usuario destino;
+	public final Usuario fuente;
 	public final int port;
 
 	private Cliente cliente;
 
-	private static Logger log = Logger.getLogger("EMISOR");
+	private static Logger log = Logger.getLogger("RECEPTOR");
 	private static Handler logH;
 
-	public Emisor(Path f, Usuario u, int p, Cliente c) {
+	public Receptor(Path f, Usuario u, int p, Cliente c) {
 		if (logH == null) {
 			logH = new ConsoleHandler();
 			log.addHandler(logH);
 		}
 		file = f;
-		destino = u;
+		fuente = u;
 		port = p;
 		cliente = c;
 	}
 
 	public void run() {
-		log.fine("Starting SocketServer...");
-		try (ServerSocket server = new ServerSocket(port)) {
-			log.fine("Server started: awaiting...");
-			Socket socket = server.accept();
-			OutputStream output = socket.getOutputStream();
+		log.fine("Attempting to connect...");
+		try (Socket socket = new Socket(fuente.dir, port)) {
+			InputStream input = socket.getInputStream();
 
-			InputStream input = Files.newInputStream(file);
+			OutputStream output = Files.newOutputStream(file);
 
-			log.fine("Connection recived. Transmitting file...");
-
+			log.fine("Connected: receiving file...");
 			int count;
 			byte[] buffer = new byte[BUFF_SIZE];
 			while((count = input.read(buffer)) > 0) {
@@ -58,7 +54,7 @@ public class Emisor extends Thread implements Conexion {
 
 			input.close();
 			output.close();
-			log.fine("File transmited");
+			log.fine("Connected: File received.");
 			cliente.onFinConexion(this);
 		} catch (IOException e) {
 			log.log(Level.SEVERE, "Error: ", e);
@@ -67,7 +63,7 @@ public class Emisor extends Thread implements Conexion {
 
 	@Override
 	public int getTipo() {
-		return 1; // Saliente
+		return -1; // Entrante
 	}
 
 	@Override
@@ -77,7 +73,7 @@ public class Emisor extends Thread implements Conexion {
 
 	@Override
 	public String getPeer() {
-		return destino.iden;
+		return fuente.iden;
 	}
 
 	@Override

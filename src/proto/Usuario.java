@@ -1,18 +1,18 @@
 package proto;
 
 import java.net.InetAddress;
-import java.util.List;
+import java.util.ArrayList;
 import java.io.Serializable;
 
 public class Usuario implements Serializable {
 	public final String iden;
 	public final InetAddress dir;
-	public List<String> ficheros;
+	public ArrayList<String> ficheros;
 
-	public Usuario(String id, InetAddress d, List<String> f) {
+	public Usuario(String id, InetAddress d, ArrayList<String> f) {
 		iden = id;
 		dir = d;
-		ficheros = f;
+		ficheros = new ArrayList<String>(f);
 	}
 
 

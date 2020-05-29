@@ -10,6 +10,13 @@ import java.io.InputStreamReader;
 import java.io.BufferedReader;
 import java.io.IOException;
 
+import java.util.concurrent.locks.ReentrantLock;
+
+import java.util.logging.Logger;
+import java.util.logging.Handler;
+import java.util.logging.ConsoleHandler;
+import java.util.logging.Level;
+
 import proto.Usuario;
 
 public class ControladorCliente {
@@ -47,12 +54,13 @@ public class ControladorCliente {
 		"Comandos:\n" +
 		"c: Conectar      d: Desconectar \n" +
 		"p: Pedir fichero s: Salir       \n" +
-		"l: Cargar lista de usuarios     \n" +
-		"u: Ver lista de usuarios        \n" +
-		"f: Ver lista de ficheros locales\n" +
-		"r: Ver lista de ficheros remotos\n" +
-		"i: Ver conexiones actuales      \n" +
-		"h: Ver historial de mensajes    \n" +
+		"l: Cargar Lista de usuarios     \n" +
+		"t: AcTualizar ficheros locales  \n" +
+		"u: Ver lista de Usuarios        \n" +
+		"f: Ver lista de Ficheros locales\n" +
+		"r: Ver lista de ficheros Remotos\n" +
+		"x: Ver coneXiones actuales      \n" +
+		"h: Ver Historial de mensajes    \n" +
 		"" +
 		"";
 
@@ -70,10 +78,15 @@ public class ControladorCliente {
 	private int outputIndex = 0, totalOutput = 0;
 	private boolean error = false;
 
+	private ReentrantLock outputLock = new ReentrantLock(true);
+
 	private BufferedReader reader;
 
 	private Cliente cliente;
 	private Cliente.Status status;
+
+	private static Logger log = Logger.getLogger("CONTROLADOR_CLIENTE");
+	private static Handler logH;
 
 	public static void main(String [] args) {
 
@@ -137,6 +150,10 @@ public class ControladorCliente {
 
 	public ControladorCliente(InetAddress servDir, InetAddress localhost,
 			int port, String id, String filesDir) throws IOException {
+		if (logH == null) {
+			logH = new ConsoleHandler();
+			log.addHandler(logH);
+		}
 		this.servDir = servDir;
 		this.localhost = localhost;
 		this.port = port;
@@ -178,9 +195,15 @@ public class ControladorCliente {
 						printOutput("Desconectando...");
 						cliente.disconnect();
 						break;
+					case "p":
+						pedirFichero();
+						break;
 					case "l":
 						printOutput("Cargando lista de usuarios...");
 						cliente.listaUsuarios();
+						break;
+					case "t":
+						cliente.actualizarFicheros();
 						break;
 					case "u":
 						mostrarListaUsuarios();
@@ -191,6 +214,8 @@ public class ControladorCliente {
 					case "r":
 						mostrarFicherosRemotos();
 						break;
+					case "x":
+						mostrarConexiones();
 					case "h":
 						mostrarHistorial();
 						break;
@@ -303,6 +328,12 @@ public class ControladorCliente {
 		mostrarLista(fich, 0);
 	}
 
+	private void mostrarConexiones() throws IOException {
+		ArrayList<String> conex = new ArrayList<String>();
+		cliente.getConexiones().forEach((k,v) -> conex.add(v.print()));
+		mostrarLista(conex, 0);
+	}
+
 	private void mostrarHistorial() throws IOException {
 		ArrayList<String> hist = new ArrayList<String>(totalOutput);
 		int i;
@@ -313,6 +344,15 @@ public class ControladorCliente {
 		for(; i != outputIndex; i = (i+1) % OUTPUT_BUFF_SIZE)
 		   hist.add(output[i]);
 		mostrarLista(hist, Math.max(0,outputIndex-10));
+	}
+
+	private void pedirFichero() throws IOException {
+		clearScreen();
+		System.out.println(HEADER);
+		System.out.println("Introduce el nombre del fichero (o '.' para cancelar) : ");
+		String cmd = reader.readLine();
+		if (!cmd.equals("."))
+			cliente.pedirFichero(cmd);
 	}
 
 	void updateStatus() {
@@ -326,10 +366,10 @@ public class ControladorCliente {
 		if (status.esperandoRespuesta)
 			statusSB.append(" | Esperando");
 
-		if (status.emitiendo)
+		if (status.emitiendo > 0)
 			statusSB.append(" | Emitiendo");
 
-		if (status.recibiendo)
+		if (status.recibiendo > 0)
 			statusSB.append(" | Recibiendo");
 
 		if (error)
@@ -355,9 +395,12 @@ public class ControladorCliente {
 	}
 
 	public void printOutput(String s) {
+		log.fine(s);
+		outputLock.lock();
 		output[outputIndex] = s;
 		outputIndex = (outputIndex + 1) % OUTPUT_BUFF_SIZE;
 		if(totalOutput < OUTPUT_BUFF_SIZE) ++totalOutput;
+		outputLock.unlock();
 	}
 
 	public void setError() {

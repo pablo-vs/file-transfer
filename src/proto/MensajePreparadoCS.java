@@ -4,13 +4,13 @@ import java.net.InetAddress;
 
 public class MensajePreparadoCS extends Mensaje {
 	public final Usuario usuario;
-	public final InetAddress dirIp;
 	public final int puerto;
+	public final String fichero;
 
-	MensajePreparadoCS(String origen, String destino, Usuario usu, InetAddress dir, int p) {
+	public MensajePreparadoCS(String origen, String destino, Usuario usu, int p, String fich) {
 		super(TipoMensaje.MENSAJE_PREPARADO_CLIENTESERVIDOR, origen, destino);
 		usuario = usu;
-		dirIp = dir;
 		puerto = p;
+		fichero = fich;
 	}
 }
