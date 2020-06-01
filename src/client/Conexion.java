@@ -1,5 +1,8 @@
 package client;
 
+/*
+ *	Interfaz para agrupar las clases Emisor y Receptor
+ */
 public interface Conexion {
 
 	public int getTipo();

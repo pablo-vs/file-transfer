@@ -42,18 +42,31 @@ public class Cliente {
 	private static Logger log = Logger.getLogger("CLIENTE");
 	private static Handler logH;
 
+	// Lista de ficheros locales
+	// Puede ser modificada por el usuario añadiendo un fichero nuevo
+	// o por un receptor que ha terminado una descarga
 	private Concurrent<ArrayList<String>> ficheros =
 		new Concurrent<>(new ArrayList<>());
 
+	// Tabla de conexiones con otros clientes, la clave es el puerto
+	// Puede ser modificada por receptores y emisores
 	private Concurrent<HashMap<Integer, Conexion>> conexiones =
 		new Concurrent<>(new HashMap<>());
 
+	// Lista de usuarios conectados
+	// En principio solo puede ser modificada por el hilo del
+	// oyente, pero el lock garantiza que no habrá modificaciones
+	// durante la lectura que podrían causar comportamiento
+	// inesperado
 	private Concurrent<HashMap<String, Usuario>> usuarios =
 		new Concurrent<>(new HashMap<>());
 
+	// Índice de ficheros remotos y los usuarios que los sirven
+	// Igual que la lista de usuarios.
 	private Concurrent<HashMap<String, ArrayList<String>>> ficherosRemotos =
 		new Concurrent<>(new HashMap<>());
 
+	// Estado actual del cliente. Puede ser modificado y leido por varios hilos
 	private Concurrent<Status> status = new Concurrent<Status>(new Status());
 
 	public class Status {
@@ -89,6 +102,7 @@ public class Cliente {
 			log.log(Level.SEVERE, "No se ha podido determinar la dirección local", e);
 		}
 		
+		// Lee el directorio y almacena los nombres de los archivos
 		ficheros.set(new ArrayList<String>(
 			Files.list(Paths.get(fd))
 			.map((x) -> x.getFileName().toString())
@@ -111,6 +125,8 @@ public class Cliente {
 				status.unlock();
 				return;
 			}
+
+			// Abre el socket y crea el oyente
 			log.fine("Intentando conectar...");
 			Socket socket;
 			socket = new Socket(serverDir, port);
@@ -122,6 +138,7 @@ public class Cliente {
 			OS = new OyenteServidor(input, output, this);
 			OS.start();
 
+			// Envía mensaje de conexión
 			Usuario usu = new Usuario(iden, localhost, ficheros.lockAndGet());
 			ficheros.unlock();
 			MensajeConexion con = new MensajeConexion(
@@ -159,6 +176,7 @@ public class Cliente {
 			st.esperandoRespuesta = true;
 			status.unlock();
 		} catch (IOException e) {
+			log.log(Level.SEVERE, "Error: ", e);
 			System.err.println("CLIENT:");
 			System.err.println(e);
 		} finally {
@@ -167,6 +185,7 @@ public class Cliente {
 		}
 	}
 
+	// Actualiza la lista local de ficheros
 	public void actualizarFicheros() {
 		control.printOutput("Leyendo lista de ficheros locales...");
 		try {
@@ -182,6 +201,8 @@ public class Cliente {
 		}
 	}
 
+	// Si el cliente está conectado, actualiza la lista de ficheros
+	// de este usuario en el servidor
 	public void enviarActualizar() {
 		try {
 			Status st = status.lockAndGet();
@@ -226,7 +247,7 @@ public class Cliente {
 			ficheros.unlock();
 			HashMap<String, ArrayList<String>> fr = ficherosRemotos.lockAndGet();
 			if (!fr.containsKey(fich)) {
-				control.printOutput("Fichero desconocido");
+				control.printOutput("Error: Fichero desconocido");
 				control.setError();
 				ficherosRemotos.unlock();
 				status.unlock();
@@ -252,6 +273,8 @@ public class Cliente {
 		}
 	}
 
+	// Envía un mensaje de desconexión y espera al oyente
+	// El cliente se bloquea hasta recibir una respuesta
 	void disconnect() {
 		try {
 			Status st = status.lockAndGet();
@@ -306,6 +329,10 @@ public class Cliente {
 		Status st = status.lockAndGet();
 		st.esperandoRespuesta = false;
 		status.unlock();
+
+		// Actualiza la tabla de usuarios
+		// y el índice de ficheros remotos
+
 		HashMap<String, Usuario> usu = new HashMap<>();
 		HashMap<String, ArrayList<String>> fichR = new HashMap<>();
 		for(Usuario u : m.usuarios) {
@@ -328,6 +355,10 @@ public class Cliente {
 	}
 
 	public void onEmitirFichero(MensajeEmitirFichero m) {
+
+		// Elige un puerto libre, crea un emisor y lo
+		// añade a la lista de conexiones
+
 		Path path = Paths.get(fileDir,m.fichero);
 		HashMap<Integer, Conexion> conex = conexiones.lockAndGet();
 		int port;
@@ -337,6 +368,8 @@ public class Cliente {
 		Emisor em = new Emisor(path, m.usuario, port, this);
 		conex.put(port, em);
 		conexiones.unlock();
+
+		// Inicia el emisor y envía el mensaje de PreparadoCS
 
 		control.printOutput("Solicitud de emisión recibida:");
 		control.printOutput(m.fichero + " -> " + m.usuario.iden + ":" + port);
@@ -355,6 +388,10 @@ public class Cliente {
 	}
 
 	public void onPreparadoSC(MensajePreparadoSC m) {
+
+		// Crea un receptor, lo añade a la tabla
+		// de conexiones y lo inicia
+
 		Path path = Paths.get(fileDir, m.fichero);
 		Receptor re = new Receptor(path, m.usu, m.puerto, this);
 
@@ -373,6 +410,10 @@ public class Cliente {
 	}
 
 	public void onFinConexion(Conexion e) {
+
+		// Cierra la conexión, la elimina de la tabla
+		// y actualiza la lista de ficheros en el caso de un receptor.
+
 		HashMap<Integer, Conexion> conex = conexiones.lockAndGet();
 		conex.remove(e.getPuerto());
 		conexiones.unlock();

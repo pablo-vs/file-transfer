@@ -30,6 +30,8 @@ public class OyenteServidor extends Thread {
 		cliente = cl;
 	}
 
+	// El oyente solo escucha y pasa el mensaje al handler adecuado
+	// del cliente
 	public void run() {
 		try {
 

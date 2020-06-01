@@ -170,6 +170,8 @@ public class OyenteCliente implements Runnable {
 		OC.preparadoSC(usuario, m.puerto, m.fichero);
 	}
 
+	// Llamado desde otro oyente, pide al usuario asociado
+	// a este oyente que envíe el fichero dado al usuario dado
 	private void emitirFichero(String fich, Usuario usu) throws IOException {
 		MensajeEmitirFichero req = 
 			new MensajeEmitirFichero(
@@ -180,6 +182,7 @@ public class OyenteCliente implements Runnable {
 		writeMensaje(req);
 	}
 
+	// Llamado desde otro oyente que ha recibido un PreparadoCS
 	private void preparadoSC(Usuario usu, int puerto, String fich) throws IOException {
 		MensajePreparadoSC req =
 			new MensajePreparadoSC(
@@ -197,6 +200,9 @@ public class OyenteCliente implements Runnable {
 		usuario = m.usuario;
 	}
 
+	// Hace un lock del flujo de salida y escribe un mensaje
+	// Esto es necesario porque otros oyentes pueden enviar
+	// mensajes por este flujo.
 	private void writeMensaje(Mensaje m) throws IOException {
 		lockOutput.lock();
 		output.writeObject(m);

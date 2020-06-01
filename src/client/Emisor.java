@@ -53,8 +53,8 @@ public class Emisor extends Thread implements Conexion {
 			int count;
 			byte[] buffer = new byte[BUFF_SIZE];
 			while((count = input.read(buffer)) > 0) {
-				// Latency test
-				Thread.sleep(60000);
+				// Prueba de latencia
+				// Thread.sleep(60000);
 				output.write(buffer, 0, count);
 			}
 

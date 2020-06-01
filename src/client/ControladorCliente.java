@@ -24,6 +24,7 @@ import util.Concurrent;
 
 public class ControladorCliente {
 
+	// UI templates
 	private static final String HEADER = 
 		"################################\n" +
 		"##### File Transfer Client #####\n" +
@@ -72,6 +73,11 @@ public class ControladorCliente {
 		HELP +
 		"\nPulse <Enter> para volver al menú: ";
 
+	private static String OS = System.getProperty("os.name").toLowerCase();
+
+
+
+
 	private InetAddress servDir, localhost;
 	private int port;
 	private String id, filesDir, statusStr;
@@ -91,6 +97,10 @@ public class ControladorCliente {
 	private static Logger log = Logger.getLogger("CONTROLADOR_CLIENTE");
 	private static Handler logH;
 
+
+	// Método Main del cliente. Acepta cuatro argumentos:
+	// dirección y puerto del servidor, identificador
+	// del usuario y directorio de archivos compartidos
 	public static void main(String [] args) {
 
 		BufferedReader reader =
@@ -167,6 +177,10 @@ public class ControladorCliente {
 			output[i] = "";
 	}
 
+
+	// Método principal del controlador. Lee
+	// el estado del cliente, escribe el menú, espera un comando
+	// y llama al método adecuado
 	public void run() {
 
 		reader = new BufferedReader(new InputStreamReader(System.in));
@@ -238,21 +252,31 @@ public class ControladorCliente {
 		}
 	}
 
+	// Submenú de lista de usuarios
+	// Muestra la lista por páginas y permite ver los
+	// detalles de cada usuario
 	private void mostrarListaUsuarios() throws IOException {
+
+		// Obtiene la lista de usuarios del cliente
+
 		Concurrent<HashMap<String, Usuario>> lista = cliente.getUsuarios();
 		ArrayList<String> usu = new ArrayList<String>(lista.lockAndGet().keySet());
 		lista.unlock();
 		int index = 0;
 		boolean keep = true;
 		String out = "";
+
 		while(keep) {
+
 			clearScreen();
 			System.out.println(HEADER);
+
 			for(int i = index; i < index+10 && i < usu.size(); ++i) {
 				System.out.printf("%s. %s\n", i+1, usu.get(i));
 			}
 			System.out.printf("\np: previo\tn: siguiente\n<num>: mostrar usuario <num>\nv: volver\n%s\nIntroduzca un comando: ", out);
 			out = "";
+
 			String cmd = reader.readLine();
 			switch(cmd) {
 				case "n":
@@ -282,6 +306,7 @@ public class ControladorCliente {
 		}
 	}
 
+	// Submenú de usuario
 	private void mostrarUsuario(String iden) throws IOException {
 		clearScreen();
 		System.out.println(HEADER);
@@ -295,18 +320,23 @@ public class ControladorCliente {
 		reader.readLine();
 	}
 
+	// Método de utilidad para mostrar listas genéricas
 	private void mostrarLista(List<String> lista, int start) throws IOException {
 		int index = start;
 		boolean keep = true;
 		String out = "";
+
 		while(keep) {
+
 			clearScreen();
 			System.out.println(HEADER);
+
 			for(int i = index; i < index+10 && i < lista.size(); ++i) {
 				System.out.printf("%s. %s\n", i+1, lista.get(i));
 			}
 			System.out.printf("\np: previo\tn: siguiente\nv: volver\n%s\nIntroduzca un comando: ", out);
 			out = "";
+
 			String cmd = reader.readLine();
 			switch(cmd) {
 				case "n":
@@ -328,11 +358,13 @@ public class ControladorCliente {
 		}
 	}
 
+	// Muestra la lista de ficheros locales
 	private void mostrarFicheros() throws IOException {
 		List<String> fich = cliente.getFicheros();
 		mostrarLista(fich, 0);
 	}
 
+	// Muestra la lista de ficheros remotos
 	private void mostrarFicherosRemotos() throws IOException {
 		Concurrent<HashMap<String, ArrayList<String>>> lista =
 			cliente.getFicherosRemotos();
@@ -341,6 +373,7 @@ public class ControladorCliente {
 		mostrarLista(fich, 0);
 	}
 
+	// Muestra la lista de conexiones
 	private void mostrarConexiones() throws IOException {
 		Concurrent<HashMap<Integer, Conexion>> lista =
 			cliente.getConexiones();
@@ -352,18 +385,24 @@ public class ControladorCliente {
 		mostrarLista(conex, 0);
 	}
 
+	// Muestra el historial de mensajes de salida del controlador
 	private void mostrarHistorial() throws IOException {
 		ArrayList<String> hist = new ArrayList<String>(totalOutput);
-		int i;
-		if (totalOutput < OUTPUT_BUFF_SIZE)
+		int i, start;
+		if (totalOutput < OUTPUT_BUFF_SIZE) {
 			i = 0;
-		else
+			start = Math.max(0, outputIndex-10);
+		}
+		else {
 			i = outputIndex+1;
+			start = OUTPUT_BUFF_SIZE-11;
+		}
 		for(; i != outputIndex; i = (i+1) % OUTPUT_BUFF_SIZE)
 		   hist.add(output[i]);
-		mostrarLista(hist, Math.max(0,outputIndex-10));
+		mostrarLista(hist, start);
 	}
 
+	// Submenú de pedir fichero
 	private void pedirFichero() throws IOException {
 		clearScreen();
 		System.out.println(HEADER);
@@ -373,6 +412,8 @@ public class ControladorCliente {
 			cliente.pedirFichero(cmd);
 	}
 
+	// Lee el estado del cliente y construye
+	// un string que lo represente
 	void updateStatus() {
 		status = cliente.getStatus();
 		StringBuilder statusSB = new StringBuilder();
@@ -395,8 +436,11 @@ public class ControladorCliente {
 		statusStr = statusSB.toString();
 	}
 
-	public static void clearScreen() {  
-		System.out.print("\033[H\033[2J");  
+	public static void clearScreen() {
+		if (isWindows())
+			System.out.println("\n\n");
+		else
+			System.out.print("\033[H\033[2J");  
 		System.out.flush();  
 	}  
 
@@ -412,6 +456,9 @@ public class ControladorCliente {
 				statusStr, out.toString());
 	}
 
+	// Escribe una línea en la "caja" de mensajes del menú principal
+	// que se hará visible la próxima vez que se actualize la interfaz
+	// Este método puede ser llamado desde varios hilos
 	public void printOutput(String s) {
 		log.fine(s);
 		outputLock.lock();
@@ -424,5 +471,9 @@ public class ControladorCliente {
 	public void setError() {
 		error = true;	
 	};
+
+	private static boolean isWindows() {
+		return (OS.indexOf("win") >= 0);
+	}
 }
 
