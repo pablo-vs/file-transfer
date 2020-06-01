@@ -5,6 +5,6 @@ public class MensajeActualizar extends Mensaje {
 
 	public MensajeActualizar(String origen, String destino, Usuario usu) {
 		super(TipoMensaje.MENSAJE_ACTUALIZAR, origen, destino);
-		usuario = usu;
+		usuario = new Usuario(usu);
 	}
 }

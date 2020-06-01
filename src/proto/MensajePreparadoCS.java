@@ -9,7 +9,7 @@ public class MensajePreparadoCS extends Mensaje {
 
 	public MensajePreparadoCS(String origen, String destino, Usuario usu, int p, String fich) {
 		super(TipoMensaje.MENSAJE_PREPARADO_CLIENTESERVIDOR, origen, destino);
-		usuario = usu;
+		usuario = new Usuario(usu);
 		puerto = p;
 		fichero = fich;
 	}

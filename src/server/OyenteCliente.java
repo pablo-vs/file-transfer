@@ -194,6 +194,7 @@ public class OyenteCliente implements Runnable {
 		log.finer(String.valueOf(m.usuario.ficheros.size()));
 		m.usuario.ficheros.forEach(s -> log.finer(s));
 		servidor.actualizarUsuario(m.usuario);
+		usuario = m.usuario;
 	}
 
 	private void writeMensaje(Mensaje m) throws IOException {

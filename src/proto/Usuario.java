@@ -15,6 +15,12 @@ public class Usuario implements Serializable {
 		ficheros = new ArrayList<String>(f);
 	}
 
+	public Usuario(Usuario otro) {
+		iden = otro.iden;
+		dir = otro.dir;
+		ficheros = new ArrayList<String>(otro.ficheros);
+	}
+
 
 	@Override
 	public boolean equals(Object o) {

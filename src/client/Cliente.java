@@ -7,6 +7,8 @@ import java.io.IOException;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.stream.Collectors;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -40,18 +42,19 @@ public class Cliente {
 	private static Logger log = Logger.getLogger("CLIENTE");
 	private static Handler logH;
 
-	private Concurrent<ArrayList<String>> ficheros;
+	private Concurrent<ArrayList<String>> ficheros =
+		new Concurrent<>(new ArrayList<>());
 
 	private Concurrent<HashMap<Integer, Conexion>> conexiones =
-		new Concurrent<HashMap<Integer, Conexion>>();
+		new Concurrent<>(new HashMap<>());
 
 	private Concurrent<HashMap<String, Usuario>> usuarios =
-		new Concurrent<HashMap<String, Usuario>>();
+		new Concurrent<>(new HashMap<>());
 
 	private Concurrent<HashMap<String, ArrayList<String>>> ficherosRemotos =
-		new Concurrent<HashMap<String, ArrayList<String>>>();
+		new Concurrent<>(new HashMap<>());
 
-	private Concurrent<Status> status = new Concurrent<Status>();
+	private Concurrent<Status> status = new Concurrent<Status>(new Status());
 
 	public class Status {
 		public boolean conectado = false, 
@@ -86,7 +89,7 @@ public class Cliente {
 			log.log(Level.SEVERE, "No se ha podido determinar la dirección local", e);
 		}
 		
-		ficheros.lockAndSet(new ArrayList<String>(
+		ficheros.set(new ArrayList<String>(
 			Files.list(Paths.get(fd))
 			.map((x) -> x.getFileName().toString())
 			.collect(Collectors.toList())));
@@ -94,19 +97,22 @@ public class Cliente {
 	}
 
 	void connect() {
-		if (status.conectado) {
-			control.printOutput("No se puede conectar: ya conectado.");
-			control.setError();
-			return;
-		}
-		if (status.esperandoRespuesta) {
-			control.setError();
-			control.printOutput("No se puede conectar: esperando respuesta");
-			return;
-		}
-		log.fine("Intentando conectar...");
-		Socket socket;
 		try {
+			Status st = status.lockAndGet();
+			if (st.conectado) {
+				control.printOutput("No se puede conectar: ya conectado.");
+				control.setError();
+				status.unlock();
+				return;
+			}
+			if (st.esperandoRespuesta) {
+				control.setError();
+				control.printOutput("No se puede conectar: esperando respuesta");
+				status.unlock();
+				return;
+			}
+			log.fine("Intentando conectar...");
+			Socket socket;
 			socket = new Socket(serverDir, port);
 
 			output = new ObjectOutputStream(socket.getOutputStream());
@@ -116,51 +122,58 @@ public class Cliente {
 			OS = new OyenteServidor(input, output, this);
 			OS.start();
 
-			Usuario usu = new Usuario(iden, localhost, ficheros);
+			Usuario usu = new Usuario(iden, localhost, ficheros.lockAndGet());
+			ficheros.unlock();
 			MensajeConexion con = new MensajeConexion(
 					serverDir.getHostAddress(), localhost.getHostAddress(), usu);
 
 			output.writeObject(con);
 			log.fine("Conexión solicitada.");
 
-			statusLock.lock();
-			status.esperandoRespuesta = true;
-			statusLock.unlock();
+			st.esperandoRespuesta = true;
+			status.unlock();
 			
 		} catch (IOException e) {
 			System.err.println("CLIENT:");
 			System.err.println(e);
+		} finally {
+			if(status.heldByMe())
+				status.unlock();
 		}
 	}
 
 	void listaUsuarios() {
-		if (!status.conectado) {
-			control.printOutput("No se puede cargar lista: no conectado.");
-			control.setError();
-			return;
-		}
 		try {
+			Status st = status.lockAndGet();
+			if (!st.conectado) {
+				control.printOutput("No se puede cargar lista: no conectado.");
+				control.setError();
+				status.unlock();
+				return;
+			}
 			MensajeListaUsuarios req = new MensajeListaUsuarios
 				(serverDir.getHostAddress(), localhost.getHostAddress());
 
 			log.fine("Solicitando lista de usuarios...");
 			output.writeObject(req);
-			statusLock.lock();
-			status.esperandoRespuesta = true;
-			statusLock.unlock();
+			st.esperandoRespuesta = true;
+			status.unlock();
 		} catch (IOException e) {
 			System.err.println("CLIENT:");
 			System.err.println(e);
+		} finally {
+			if(status.heldByMe())
+				status.unlock();
 		}
 	}
 
 	public void actualizarFicheros() {
 		control.printOutput("Leyendo lista de ficheros locales...");
 		try {
-			ficheros = new ArrayList<String>(
+			ficheros.set(new ArrayList<String>(
 				Files.list(Paths.get(fileDir))
 				.map((x) -> x.getFileName().toString())
-				.collect(Collectors.toList()));
+				.collect(Collectors.toList())));
 			control.printOutput("Lista actualizada");
 			enviarActualizar();
 		} catch (IOException e) {
@@ -170,12 +183,16 @@ public class Cliente {
 	}
 
 	public void enviarActualizar() {
-		if (!status.conectado) {
-			log.fine("No se envía mensaje de actualización: no conectado");
-			return;
-		}
 		try {
-			Usuario usu = new Usuario(iden, localhost, ficheros);
+			Status st = status.lockAndGet();
+			if (!st.conectado) {
+				log.fine("No se envía mensaje de actualización: no conectado");
+				status.unlock();
+				return;
+			}
+			status.unlock();
+			Usuario usu = new Usuario(iden, localhost, ficheros.lockAndGet());
+			ficheros.unlock();
 			MensajeActualizar req = new MensajeActualizar
 				(serverDir.getHostAddress(), localhost.getHostAddress(),
 				 usu);
@@ -184,118 +201,148 @@ public class Cliente {
 		} catch (IOException e) {
 			System.err.println("CLIENT:");
 			System.err.println(e);
+		} finally {
+			if(status.heldByMe())
+				status.unlock();
 		}
 	}
 
 	void pedirFichero(String fich) {
-		if (!status.conectado) {
-			control.printOutput("No se puede pedir fichero: no conectado.");
-			control.setError();
-			return;
-		}
-		if (!ficherosRemotos.containsKey(fich)) {
-			control.printOutput("Fichero desconocido");
-			control.setError();
-			return;
-		}
 		try {
+			Status st = status.lockAndGet();
+			if (!st.conectado) {
+				control.printOutput("No se puede pedir fichero: no conectado.");
+				control.setError();
+				status.unlock();
+				return;
+			}
+			if(ficheros.lockAndGet().contains(fich)) {
+				control.printOutput("Error: Fichero ya existente.");
+				control.setError();
+				ficheros.unlock();
+				status.unlock();
+				return;
+			}
+			ficheros.unlock();
+			HashMap<String, ArrayList<String>> fr = ficherosRemotos.lockAndGet();
+			if (!fr.containsKey(fich)) {
+				control.printOutput("Fichero desconocido");
+				control.setError();
+				ficherosRemotos.unlock();
+				status.unlock();
+				return;
+			}
+			ficherosRemotos.unlock();
 			MensajePedirFichero req = new MensajePedirFichero
 				(serverDir.getHostAddress(), localhost.getHostAddress(),
 				 fich);
 
 			control.printOutput("Pidiendo fichero " + fich);
 			output.writeObject(req);
-			statusLock.lock();
-			status.esperandoRespuesta = true;
-			statusLock.unlock();
+			st.esperandoRespuesta = true;
+			status.unlock();
 		} catch (IOException e) {
 			System.err.println("CLIENT:");
 			System.err.println(e);
+		} finally {
+			if(status.heldByMe())
+				status.unlock();
+			if(ficherosRemotos.heldByMe())
+				ficherosRemotos.unlock();
 		}
 	}
 
 	void disconnect() {
-		if (!status.conectado) {
-			control.printOutput("No se puede desconectar: no conectado.");
-			control.setError();
-			return;
-		}
-		if (status.esperandoRespuesta) {
-			control.printOutput("No se puede desconectar: esperando respuesta");
-			control.setError();
-			return;
-		}
 		try {
+			Status st = status.lockAndGet();
+			if (!st.conectado) {
+				control.printOutput("No se puede desconectar: no conectado.");
+				control.setError();
+				status.unlock();
+				return;
+			}
+			if (st.esperandoRespuesta) {
+				control.printOutput("No se puede desconectar: esperando respuesta");
+				control.setError();
+				status.unlock();
+				return;
+			}
+			status.unlock();
 			MensajeCerrarConexion req = new MensajeCerrarConexion
 				(serverDir.getHostAddress(), localhost.getHostAddress());
 
 			log.fine("Solicitando cierre de conexión...");
 			output.writeObject(req);
-			statusLock.lock();
-			status.esperandoRespuesta = true;
-			statusLock.unlock();
+			st = status.lockAndGet();
+			st.esperandoRespuesta = true;
+			status.unlock();
 			OS.join();
 		} catch (IOException | InterruptedException e) {
 			System.err.println("CLIENT:");
 			System.err.println(e);
+		} finally {
+			if(status.heldByMe())
+				status.unlock();
 		}
 	}
 
 	public void onConnectionConfirmed() {
-		statusLock.lock();
-		status.esperandoRespuesta = false;
-		status.conectado = true;
-		statusLock.unlock();
+		Status st = status.lockAndGet();
+		st.esperandoRespuesta = false;
+		st.conectado = true;
+		status.unlock();
 		control.printOutput("Conectado");
 	}
 
 	public void onCloseConfirmed() {
-		statusLock.lock();
-		status.esperandoRespuesta = false;
-		status.conectado = false;
-		statusLock.unlock();
+		Status st = status.lockAndGet();
+		st.esperandoRespuesta = false;
+		st.conectado = false;
+		status.unlock();
 		control.printOutput("Desconectado");
 	}
 
 	public void onListConfirmed(MensajeConfirmacionLista m) {
-		statusLock.lock();
-		status.esperandoRespuesta = false;
-		statusLock.unlock();
-		usuarios.clear();
-		ficherosRemotos.clear();
+		Status st = status.lockAndGet();
+		st.esperandoRespuesta = false;
+		status.unlock();
+		HashMap<String, Usuario> usu = new HashMap<>();
+		HashMap<String, ArrayList<String>> fichR = new HashMap<>();
 		for(Usuario u : m.usuarios) {
-			usuarios.put(u.iden, u);
+			usu.put(u.iden, u);
 		}
 
 		for(Usuario u : m.usuarios) {
 			for(String s : u.ficheros) {	
 				ArrayList<String> ls;
-				if (ficherosRemotos.contains(s)) {
-					ls = ficherosRemotos.get(s);
-				} else {
-					ls = new ArrayList<String>();
-				}
+				ls = new ArrayList<String>();
 				ls.add(u.iden);
-				ficherosRemotos.put(s, ls);
+				fichR.put(s, ls);
 			}
 		}
+
+		usuarios.set(usu);
+		ficherosRemotos.set(fichR);
 
 		control.printOutput("Lista cargada");
 	}
 
 	public void onEmitirFichero(MensajeEmitirFichero m) {
 		Path path = Paths.get(fileDir,m.fichero);
+		HashMap<Integer, Conexion> conex = conexiones.lockAndGet();
 		int port;
 		do {
 			port = 33000 + (int)(Math.random() * (1000));
-		} while(conexiones.containsKey(port));
+		} while(conex.containsKey(port));
 		Emisor em = new Emisor(path, m.usuario, port, this);
-		conexiones.put(port, em);
+		conex.put(port, em);
+		conexiones.unlock();
+
 		control.printOutput("Solicitud de emisión recibida:");
 		control.printOutput(m.fichero + " -> " + m.usuario.iden + ":" + port);
-		statusLock.lock();
-		++status.emitiendo;
-		statusLock.unlock();
+		Status st = status.lockAndGet();
+		++st.emitiendo;
+		status.unlock();
 		em.start();
 		MensajePreparadoCS resp = new MensajePreparadoCS(
 			serverDir.getHostAddress(), localhost.getHostAddress(),
@@ -310,60 +357,65 @@ public class Cliente {
 	public void onPreparadoSC(MensajePreparadoSC m) {
 		Path path = Paths.get(fileDir, m.fichero);
 		Receptor re = new Receptor(path, m.usu, m.puerto, this);
-		conexiones.put(port, re);
+
+		HashMap<Integer, Conexion> conex = conexiones.lockAndGet();
+		conex.put(m.puerto, re);
+		conexiones.unlock();
+
 		control.printOutput("Recepción de " + m.fichero+ " preparada");
-		statusLock.lock();
-		++status.recibiendo;
-		status.esperandoRespuesta = false;
-		statusLock.unlock();
+
+		Status st = status.lockAndGet();
+		++st.recibiendo;
+		st.esperandoRespuesta = false;
+		status.unlock();
+
 		re.start();
 	}
 
 	public void onFinConexion(Conexion e) {
-		conexiones.remove(e.getPuerto());
+		HashMap<Integer, Conexion> conex = conexiones.lockAndGet();
+		conex.remove(e.getPuerto());
+		conexiones.unlock();
+
+		Status st = status.lockAndGet();
 		if (e.getTipo() == 1) {
 			// Emisor
-			statusLock.lock();
-			--status.emitiendo;
-			statusLock.unlock();
+			--st.emitiendo;
 			control.printOutput("Emisión en " + e.getPuerto() + " finalizada.");
+			status.unlock();
 		} else {
 			// Receptor
-			statusLock.lock();
-			--status.recibiendo;
-			statusLock.unlock();
+			--st.recibiendo;
 			control.printOutput("Recepción de " + e.getFilename() + " finalizada.");
-			ficherosLock.lock();
-			ficheros.add(e.getFilename());
-			ficherosLock.unlock();
+			ArrayList<String> fich = ficheros.lockAndGet();
+			fich.add(e.getFilename());
+			ficheros.unlock();
+			status.unlock();
 			enviarActualizar();
 		}
 	}
 
 	public Status getStatus() {
-		Status res;
-		statusLock.lock();
-		res = new Status(status);
-		statusLock.unlock();
+		Status res = new Status(status.lockAndGet());
+		status.unlock();
 		return res;
 	}
 
-	public ConcurrentMap<String,Usuario> getUsuarios() {
+	public Concurrent<HashMap<String,Usuario>> getUsuarios() {
 		return usuarios;
 	}
 
 	public List<String> getFicheros() {
-		ficherosLock.lock();
-		ArrayList<String> fich = new ArrayList<String>(ficheros);
-		ficherosLock.unlock();
-		return ficheros;
+		ArrayList<String> fich = new ArrayList<String>(ficheros.lockAndGet());
+		ficheros.unlock();
+		return fich;
 	}
 	
-	public ConcurrentMap<String,ArrayList<String>> getFicherosRemotos() {
+	public Concurrent<HashMap<String,ArrayList<String>>> getFicherosRemotos() {
 		return ficherosRemotos;
 	}
 
-	public ConcurrentMap<Integer,Conexion> getConexiones() {
+	public Concurrent<HashMap<Integer,Conexion>> getConexiones() {
 		return conexiones;
 	}
 }

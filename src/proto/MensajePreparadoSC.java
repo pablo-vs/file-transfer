@@ -9,7 +9,7 @@ public class MensajePreparadoSC extends Mensaje {
 
 	public MensajePreparadoSC(String origen, String destino, Usuario u, int p, String fich) {
 		super(TipoMensaje.MENSAJE_PREPARADO_SERVIDORCLIENTE, origen, destino);
-		usu = u;
+		usu = new Usuario(u);
 		puerto = p;
 		fichero = fich;
 	}

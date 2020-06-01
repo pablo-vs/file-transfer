@@ -5,6 +5,8 @@ import java.net.UnknownHostException;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 
 import java.io.InputStreamReader;
 import java.io.BufferedReader;
@@ -18,6 +20,7 @@ import java.util.logging.ConsoleHandler;
 import java.util.logging.Level;
 
 import proto.Usuario;
+import util.Concurrent;
 
 public class ControladorCliente {
 
@@ -216,6 +219,7 @@ public class ControladorCliente {
 						break;
 					case "x":
 						mostrarConexiones();
+						break;
 					case "h":
 						mostrarHistorial();
 						break;
@@ -235,7 +239,9 @@ public class ControladorCliente {
 	}
 
 	private void mostrarListaUsuarios() throws IOException {
-		ArrayList<String> usu = new ArrayList<String>(cliente.getUsuarios().keySet());
+		Concurrent<HashMap<String, Usuario>> lista = cliente.getUsuarios();
+		ArrayList<String> usu = new ArrayList<String>(lista.lockAndGet().keySet());
+		lista.unlock();
 		int index = 0;
 		boolean keep = true;
 		String out = "";
@@ -279,7 +285,11 @@ public class ControladorCliente {
 	private void mostrarUsuario(String iden) throws IOException {
 		clearScreen();
 		System.out.println(HEADER);
-		Usuario usu = cliente.getUsuarios().get(iden);
+
+		Concurrent<HashMap<String, Usuario>> lista = cliente.getUsuarios();
+		Usuario usu = lista.lockAndGet().get(iden);
+		lista.unlock();
+
 		System.out.println(usu.toString());
 		System.out.println("\nPulse <Enter> para volver");
 		reader.readLine();
@@ -324,13 +334,21 @@ public class ControladorCliente {
 	}
 
 	private void mostrarFicherosRemotos() throws IOException {
-		List<String> fich = new ArrayList<String>(cliente.getFicherosRemotos().keySet());
+		Concurrent<HashMap<String, ArrayList<String>>> lista =
+			cliente.getFicherosRemotos();
+		List<String> fich = new ArrayList<String>(lista.lockAndGet().keySet());
+		lista.unlock();
 		mostrarLista(fich, 0);
 	}
 
 	private void mostrarConexiones() throws IOException {
+		Concurrent<HashMap<Integer, Conexion>> lista =
+			cliente.getConexiones();
 		ArrayList<String> conex = new ArrayList<String>();
-		cliente.getConexiones().forEach((k,v) -> conex.add(v.print()));
+		HashMap<Integer, Conexion> map = lista.lockAndGet();
+		System.out.println(String.valueOf(map.size()));
+		map.forEach((k,v) -> conex.add(v.print()));
+		lista.unlock();
 		mostrarLista(conex, 0);
 	}
 

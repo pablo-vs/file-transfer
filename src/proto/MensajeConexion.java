@@ -5,6 +5,6 @@ public class MensajeConexion extends Mensaje {
 
 	public MensajeConexion(String origen, String destino, Usuario usu) {
 		super(TipoMensaje.MENSAJE_CONEXION, origen, destino);
-		usuario = usu;
+		usuario = new Usuario(usu);
 	}
 }
